@@ -1,0 +1,53 @@
+name: collect-occupancy
+
+# Git-scraping pattern: every 10 minutes, fetch the live feed and commit the new
+# rows. The commit history is itself the record of when we collected.
+on:
+  schedule:
+    # NOTE: GitHub's scheduled runs are best-effort — under load they arrive late or
+    # occasionally skip. That's fine here: a missed run is an honest gap, not bad data.
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}   # allow manual runs for testing
+
+# Serialize runs so a delayed job can't race a fresh one into a push conflict.
+concurrency:
+  group: collect-occupancy
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # let the built-in GITHUB_TOKEN push the new rows
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # If the fetch fails, collect.py exits non-zero and the job stops HERE — the
+      # commit step below never runs, so no partial/imputed data is ever written. The
+      # failed (red) run in the Actions log is the visible marker of the gap.
+      - name: Fetch and append
+        env:
+          # Set a repo variable named CONTACT_EMAIL (Settings > Secrets and variables >
+          # Actions > Variables) so the polite User-Agent carries a real address.
+          CONTACT_EMAIL: ${{ vars.CONTACT_EMAIL }}
+        run: python3 collect.py
+
+      - name: Commit new rows
+        run: |
+          git config user.name  "occupancy-bot"
+          git config user.email "actions@github.com"
+          # Only commit if there's actually something new — never an empty commit.
+          if [ -n "$(git status --porcelain data/occupancy.csv)" ]; then
+            git add data/occupancy.csv
+            git commit -m "data: occupancy @ $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            # Rebase on any concurrent push, then push. Retry once on race.
+            git pull --rebase --autostash origin ${{ github.ref_name }} || true
+            git push || (git pull --rebase --autostash origin ${{ github.ref_name }} && git push)
+          else
+            echo "No new rows to commit."
+          fi

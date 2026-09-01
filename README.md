@@ -65,6 +65,26 @@ Append-only. One row per zone per fetch.
   load, so spacing jitters. Nothing is ever back-filled or imputed.
 - To change cadence, edit the `cron:` line in the workflow — no code change.
 
+## Monitoring (freshness watchdog)
+
+A gap you don't notice is a gap you can't act on. `check_freshness.py` runs hourly
+(`.github/workflows/freshness.yml`), reads the newest `observed_at_utc`, and **fails
+the run if it's older than 90 minutes** — which turns the job red and triggers
+GitHub's built-in failure email to the repo owner. It's separate from the collector
+so it catches the worst case: collection stopping *entirely* (no failed collector
+runs to notice, because there are no runs at all).
+
+```bash
+python3 check_freshness.py                 # OK, or non-zero + reason if stale
+python3 check_freshness.py --max-age-min 60
+```
+
+Its one blind spot: if GitHub Actions itself stops scheduling, this checker won't run
+either. The robust upgrade is a **dead-man's-switch** — have `collect.py` ping a
+service like [healthchecks.io](https://healthchecks.io) on each success and let *it*
+alert when the pings stop. Not set up yet; the in-repo check is the zero-account
+first line of defense.
+
 ## Load it into pandas
 
 ```python

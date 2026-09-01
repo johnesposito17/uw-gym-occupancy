@@ -1,0 +1,26 @@
+name: freshness-check
+
+# Watchdog: if the collector silently stops committing new rows, this run goes red
+# and GitHub emails the repo owner. Separate from the collector so it catches the
+# case where collection stops ENTIRELY (no failed collector runs to notice, because
+# there are no runs at all) — as long as GitHub is still scheduling this checker.
+on:
+  schedule:
+    # Hourly at :17 — offset from the top of the hour, where GitHub's cron is most
+    # delayed under load. Frequent enough to catch an outage within the hour.
+    - cron: "17 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read   # read-only; this job never writes
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Check data freshness
+        run: python3 check_freshness.py

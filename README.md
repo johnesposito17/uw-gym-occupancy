@@ -58,19 +58,45 @@ Append-only. One row per zone per fetch.
 
 ## Cadence & gaps
 
-- Runs every 10 minutes via GitHub Actions (`.github/workflows/collect.yml`).
-- **Gaps are expected and honest.** If a fetch fails, the collector writes
-  nothing and exits non-zero — the run goes red and that interval is simply
-  absent from the data. GitHub's scheduled runs also arrive late or skip under
-  load, so spacing jitters. Nothing is ever back-filled or imputed.
-- To change cadence, edit the `cron:` line in the workflow — no code change.
+Target cadence is **every 10 minutes**. Two runners exist:
+
+- **Primary: local `launchd` agent** (`deploy/edu.wisc.gymoccupancy.collector.plist`
+  → `run_collect.sh`). GitHub Actions' scheduled cron proved too unreliable on this
+  repo (it dropped ~16 of every 17 runs), so a `launchd` job on the collecting Mac
+  runs `collect.py` every 10 min and pushes here. Reliable *while that Mac is awake*;
+  laptop sleep shows up as honest gaps (launchd doesn't back-fill).
+- **Backstop: GitHub Actions** (`.github/workflows/collect.yml`, `*/10`). Left in
+  place to catch intervals when the Mac is off. Same append-only, fail-loud logic.
+
+Either way: **gaps are expected and honest.** A failed fetch writes nothing and exits
+non-zero; nothing is ever back-filled or imputed. Change cadence via the plist's
+`StartInterval` (seconds) and/or the workflow's `cron:` line — no code change.
+
+### Managing the local agent
+
+```bash
+# install / reload
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/edu.wisc.gymoccupancy.collector.plist
+# stop / uninstall
+launchctl bootout   gui/$(id -u)/edu.wisc.gymoccupancy.collector
+# is it loaded? what was its last exit code?
+launchctl print     gui/$(id -u)/edu.wisc.gymoccupancy.collector | grep -iE 'state|last exit'
+# live logs
+tail -f launchd.out.log launchd.err.log
+```
+To install on a different Mac, edit the absolute paths in `run_collect.sh` and the
+plist (repo location, `python3`, and `CONTACT_EMAIL`), copy the plist into
+`~/Library/LaunchAgents/`, and bootstrap it.
 
 ## Monitoring (freshness watchdog)
 
 A gap you don't notice is a gap you can't act on. `check_freshness.py` runs hourly
 (`.github/workflows/freshness.yml`), reads the newest `observed_at_utc`, and **fails
-the run if it's older than 90 minutes** — which turns the job red and triggers
-GitHub's built-in failure email to the repo owner. It's separate from the collector
+the run if it's older than 24 hours** — which turns the job red and triggers
+GitHub's built-in failure email to the repo owner. (The threshold is 24h, not minutes,
+because the primary collector is a laptop `launchd` job: normal overnight sleep leaves
+data briefly stale, and a tight limit would email every night. 24h still catches a real
+multi-day break. Tighten it via `--max-age-min` if the Mac runs ~24/7.) It's separate from the collector
 so it catches the worst case: collection stopping *entirely* (no failed collector
 runs to notice, because there are no runs at all).
 

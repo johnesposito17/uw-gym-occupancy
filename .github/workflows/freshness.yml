@@ -23,4 +23,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Check data freshness
-        run: python3 check_freshness.py
+        # 24h threshold: the primary collector is a laptop-based launchd job, so normal
+        # overnight sleep leaves data briefly stale — a tight limit would email every
+        # night. 24h tolerates that but still catches a genuine multi-day break (dead API
+        # key, broken script, Mac off for days with the GitHub backstop also failing).
+        run: python3 check_freshness.py --max-age-min 1440

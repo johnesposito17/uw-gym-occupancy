@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .venv/
+
+# local launchd bridge logs
+launchd.out.log
+launchd.err.log

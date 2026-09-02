@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>edu.wisc.gymoccupancy.collector</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/abbyesposito/uw-gym-occupancy/run_collect.sh</string>
+    </array>
+
+    <!-- Every 10 minutes of wall-clock. If the Mac was asleep, launchd runs it once on
+         wake (it does NOT backfill missed intervals) — those show up as honest gaps. -->
+    <key>StartInterval</key>
+    <integer>600</integer>
+
+    <!-- Collect immediately when the agent loads, so we start capturing right away. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/abbyesposito/uw-gym-occupancy/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/abbyesposito/uw-gym-occupancy/launchd.err.log</string>
+</dict>
+</plist>
